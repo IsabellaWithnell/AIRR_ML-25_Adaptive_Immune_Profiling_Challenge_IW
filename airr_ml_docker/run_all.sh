@@ -17,7 +17,7 @@
 #   ./run_all.sh /data/airr /output/results 1 2 3 4 5 6
 #
 # Environment variables:
-#   AIRR_MODELS         - Models to train (default: vj,kmer4,gapped,pos_kmer,diversity,emerson)
+#   AIRR_MODELS         - Models to train (default: ALL models)
 #   TASK2_MODEL_OVERRIDE - Task 2 model (default: BEST)
 #   TASK2_USE_TEST_DATA  - Use test data for Task 2 (default: 1)
 #   N_JOBS              - Number of parallel workers (default: 16)
@@ -48,7 +48,7 @@ else
 fi
 
 # Default settings
-AIRR_MODELS="${AIRR_MODELS:-vj,kmer4,gapped,pos_kmer,diversity,emerson}"
+AIRR_MODELS="${AIRR_MODELS:-vj,kmer4,kmer56,gapped,pos_kmer,diversity,pos_aa,emerson,malidvj}"
 TASK2_MODEL_OVERRIDE="${TASK2_MODEL_OVERRIDE:-BEST}"
 TASK2_USE_TEST_DATA="${TASK2_USE_TEST_DATA:-1}"
 N_JOBS="${N_JOBS:-16}"

@@ -94,7 +94,7 @@ Your data directory should look like:
 |----------|---------|-------------|
 | `AIRR_MODELS` | `vj,kmer4,kmer56,gapped,pos_kmer,diversity,pos_aa,emerson,malidvj` | Models to train (ALL by default) |
 | `TASK2_MODEL_OVERRIDE` | `BEST` | Which model to use for Task 2 |
-| `TASK2_USE_TEST_DATA` | `1` | Use test data for important sequences |
+| `TASK2_USE_TEST_DATA` | `0` | Use training data for important sequences |
 | `AIRR_ENSEMBLE_MODE` | `standard` | Ensemble selection mode |
 | `N_JOBS` | `16` | Number of parallel workers |
 

@@ -50,7 +50,7 @@ fi
 # Default settings
 AIRR_MODELS="${AIRR_MODELS:-vj,kmer4,kmer56,gapped,pos_kmer,diversity,pos_aa,emerson,malidvj}"
 TASK2_MODEL_OVERRIDE="${TASK2_MODEL_OVERRIDE:-BEST}"
-TASK2_USE_TEST_DATA="${TASK2_USE_TEST_DATA:-1}"
+TASK2_USE_TEST_DATA="${TASK2_USE_TEST_DATA:-0}"
 N_JOBS="${N_JOBS:-16}"
 
 echo "=============================================="

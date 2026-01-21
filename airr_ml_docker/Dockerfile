@@ -58,7 +58,7 @@ RUN mkdir -p /data /output
 # Set default environment variables (can be overridden at runtime)
 ENV AIRR_MODELS=""
 ENV TASK2_MODEL_OVERRIDE="BEST"
-ENV TASK2_USE_TEST_DATA="1"
+ENV TASK2_USE_TEST_DATA="0"
 ENV AIRR_ENSEMBLE_MODE="standard"
 
 # Default number of jobs (can be overridden)

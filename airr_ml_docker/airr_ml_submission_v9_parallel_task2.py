@@ -243,33 +243,68 @@ class Cfg:
     RUN_MALIDVJ: bool = True      # VJ + positional + germline/nregion
     
     def __post_init__(self):
-        """Parse AIRR_MODELS environment variable to set model flags."""
-        models_env = os.environ.get('AIRR_MODELS', '')
-        if models_env:
-            models_list = [m.strip().lower() for m in models_env.split(',')]
-            print(f"\n*** MODEL SELECTION FROM ENV: {models_list} ***")
-            
-            # Reset all to False, then enable only specified models
-            self.RUN_VJ = 'vj' in models_list
-            self.RUN_KMER4 = 'kmer4' in models_list
-            self.RUN_KMER56 = 'kmer56' in models_list
-            self.RUN_GAPPED = 'gapped' in models_list
-            self.RUN_POS_KMER = 'pos_kmer' in models_list
-            self.RUN_DIVERSITY = 'diversity' in models_list
-            self.RUN_POS_AA = 'pos_aa' in models_list
-            self.RUN_EMERSON = 'emerson' in models_list
-            self.RUN_MALIDVJ = 'malidvj' in models_list
-            
-            print(f"  VJ models: {self.RUN_VJ}")
-            print(f"  K-mer4 models: {self.RUN_KMER4}")
-            print(f"  K-mer5/6 SGD: {self.RUN_KMER56}")
-            print(f"  Gapped k-mer: {self.RUN_GAPPED}")
-            print(f"  Positional k-mer: {self.RUN_POS_KMER}")
-            print(f"  Diversity: {self.RUN_DIVERSITY}")
-            print(f"  Positional AA: {self.RUN_POS_AA}")
-            print(f"  Emerson: {self.RUN_EMERSON}")
-            print(f"  MALIDVJ: {self.RUN_MALIDVJ}")
-            print()
+        """
+        Parse AIRR_MODELS environment variable to set model flags.
+        
+        *** FIX #1: Handle AIRR_MODELS="ALL" correctly ***
+        Previously, "ALL" would create models_list = ["all"], and since
+        'vj' in ['all'] = False, ALL models would be disabled!
+        Now we check for "all" BEFORE setting individual flags.
+        """
+        models_env = os.environ.get('AIRR_MODELS', '').strip()
+        
+        # Case 1: No environment variable set - keep all defaults (all True)
+        if not models_env:
+            return
+        
+        # Parse comma-separated list, normalize to lowercase
+        toks = [t.strip().lower() for t in models_env.split(',') if t.strip()]
+        
+        # Case 2: Empty after parsing (e.g., AIRR_MODELS=",") - keep defaults
+        if not toks:
+            print("\n*** MODEL SELECTION: Empty AIRR_MODELS, keeping all models enabled ***\n")
+            return
+        
+        # Case 3: "ALL" anywhere in the list - keep all defaults (FIX #1!)
+        if 'all' in toks:
+            print("\n*** MODEL SELECTION: ALL models enabled (AIRR_MODELS contains 'all') ***\n")
+            return
+        
+        # Case 4: Specific models requested - disable all, then enable only specified
+        print(f"\n*** MODEL SELECTION FROM ENV: {toks} ***")
+        
+        # Reset all to False first
+        self.RUN_VJ = False
+        self.RUN_KMER4 = False
+        self.RUN_KMER56 = False
+        self.RUN_GAPPED = False
+        self.RUN_POS_KMER = False
+        self.RUN_DIVERSITY = False
+        self.RUN_POS_AA = False
+        self.RUN_EMERSON = False
+        self.RUN_MALIDVJ = False
+        
+        # Enable only specified models
+        self.RUN_VJ = 'vj' in toks
+        self.RUN_KMER4 = 'kmer4' in toks
+        self.RUN_KMER56 = 'kmer56' in toks
+        self.RUN_GAPPED = 'gapped' in toks
+        self.RUN_POS_KMER = 'pos_kmer' in toks
+        self.RUN_DIVERSITY = 'diversity' in toks
+        self.RUN_POS_AA = 'pos_aa' in toks
+        self.RUN_EMERSON = 'emerson' in toks
+        self.RUN_MALIDVJ = 'malidvj' in toks
+        
+        print(f"  VJ models: {self.RUN_VJ}")
+        print(f"  K-mer4 models: {self.RUN_KMER4}")
+        print(f"  K-mer5/6 SGD: {self.RUN_KMER56}")
+        print(f"  Gapped k-mer: {self.RUN_GAPPED}")
+        print(f"  Positional k-mer: {self.RUN_POS_KMER}")
+        print(f"  Diversity: {self.RUN_DIVERSITY}")
+        print(f"  Positional AA: {self.RUN_POS_AA}")
+        print(f"  Emerson: {self.RUN_EMERSON}")
+        print(f"  MALIDVJ: {self.RUN_MALIDVJ}")
+        print()
 
 
 CFG = Cfg()
@@ -286,7 +321,18 @@ VALID_AA = set(AA)
 # =============================================================================
 
 def _score_repertoire_kmer(args):
-    """Score sequences using k-mer features (for multiprocessing)."""
+    """
+    Score sequences using k-mer features (for multiprocessing).
+    
+    *** FIX #3: Token mismatch for pos_kmer4 and gapped_kmer ***
+    
+    TRAINING tokens (ext_pos_kmer):
+        pos = 'START' if i < n * 0.33 else ('END' if i > n * 0.67 else 'MID')
+        token = f"{pos}_{km}"  # e.g., "START_ACDE", "MID_FGHI", "END_WXYZ"
+    
+    TRAINING tokens (ext_gap):
+        token = f"{seq[i:i+2]}_X_{seq[i+3:i+5]}"  # e.g., "AC_X_FG" (2+1+2 pattern)
+    """
     df, feature_scores, k, extractor_type = args
     
     results = []
@@ -306,15 +352,36 @@ def _score_repertoire_kmer(args):
             continue
         
         score = 0.0
+        
         if extractor_type == 'positional':
-            for i in range(len(seq_clean) - k + 1):
-                pos_km = f"p{i}_{seq_clean[i:i+k]}"
-                score += feature_scores.get(pos_km, 0)
+            # =================================================================
+            # FIX #3: Match ext_pos_kmer() token format exactly
+            # ext_pos_kmer uses: pos = 'START' if i < n * 0.33 else ('END' if i > n * 0.67 else 'MID')
+            # =================================================================
+            n = len(seq_clean) - k + 1
+            for i in range(n):
+                km = seq_clean[i:i+k]
+                if all(c in VALID_AA for c in km):
+                    # Determine position tag (same logic as ext_pos_kmer)
+                    if i < n * 0.33:
+                        pos = 'START'
+                    elif i > n * 0.67:
+                        pos = 'END'
+                    else:
+                        pos = 'MID'
+                    pos_km = f"{pos}_{km}"  # FIX: Was f"p{i}_{km}"
+                    score += feature_scores.get(pos_km, 0)
+        
         elif extractor_type == 'gapped':
-            for i in range(len(seq_clean) - 4):
-                gapped = f"{seq_clean[i]}_{seq_clean[i+2]}_{seq_clean[i+4]}"
+            # =================================================================
+            # FIX #3: Match ext_gap() token format exactly
+            # ext_gap uses: f"{seq[i:i+2]}_X_{seq[i+3:i+5]}" (2 chars + X + 2 chars)
+            # =================================================================
+            for i in range(len(seq_clean) - 5 + 1):  # Need 5 chars for pattern
+                gapped = f"{seq_clean[i:i+2]}_X_{seq_clean[i+3:i+5]}"  # FIX: Was wrong pattern
                 score += feature_scores.get(gapped, 0)
-        else:
+        
+        else:  # standard k-mer
             for i in range(len(seq_clean) - k + 1):
                 score += feature_scores.get(seq_clean[i:i+k], 0)
         
@@ -786,7 +853,11 @@ def load_rep(path, preprocess=False):
 
 
 def _load_single_repertoire(task: Dict) -> Optional[Dict]:
-    """Worker function for parallel loading."""
+    """
+    Worker function for parallel loading.
+    
+    *** FIX #5: Store both rep_id and repertoire_id ***
+    """
     filepath = task['filepath']
     preprocess = task.get('preprocess', False)
     try:
@@ -795,6 +866,7 @@ def _load_single_repertoire(task: Dict) -> Optional[Dict]:
             return None
         return {
             'rep_id': task['rep_id'],
+            'repertoire_id': task.get('repertoire_id', task['rep_id']),
             'label': task.get('label', -1),
             'df': df,
             'filename': task.get('filename', '')
@@ -822,9 +894,13 @@ def load_train_data(train_dir: str, preprocess: bool = False, n_workers: int = N
         if not os.path.exists(fp):
             continue
         lbl = int(r.get('label_positive', r.get('disease_label', 0)) in [True, 1, 'True', 'true'])
+        # FIX #5: Pass repertoire_id from metadata
+        repertoire_id = str(r.get('repertoire_id', fn.replace('.tsv', '')))
+        
         tasks.append({
             'filepath': fp,
             'rep_id': fn.replace('.tsv', ''),
+            'repertoire_id': repertoire_id,
             'label': lbl,
             'filename': fn,
             'preprocess': preprocess
@@ -1134,13 +1210,26 @@ def ext_em_seq(df):
 # =============================================================================
 
 def build_age_lookup(metadata: pd.DataFrame) -> Dict[str, float]:
-    """Build a lookup table of ages by repertoire_id."""
+    """
+    Build a lookup table of ages by repertoire_id.
+    
+    *** FIX #5: Store under BOTH repertoire_id AND filename stem ***
+    """
     age_lookup = {}
     for _, row in metadata.iterrows():
-        rep_id = str(row.get('repertoire_id', row.get('filename', '').replace('.tsv', '')))
+        repertoire_id = str(row.get('repertoire_id', ''))
+        filename = str(row.get('filename', '')).replace('.tsv', '')
         age = row.get('age_at_sampling_years') or row.get('age')
+        
         if pd.notna(age):
-            age_lookup[rep_id] = float(age)
+            age_val = float(age)
+            # Store under repertoire_id
+            if repertoire_id:
+                age_lookup[repertoire_id] = age_val
+            # Also store under filename stem if different (FIX #5)
+            if filename and filename != repertoire_id:
+                age_lookup[filename] = age_val
+    
     return age_lookup
 
 
@@ -1231,8 +1320,17 @@ def select_age_robust_features(train_idx, all_data, feature_names, X, y, age_loo
     train_data = [all_data[i] for i in train_idx]
     X_train = sparse_to_dense(X[train_idx]) if sparse.issparse(X) else X[train_idx]
     y_train = y[train_idx]
-    young_mask = np.array([age_lookup.get(d['rep_id'], 999) <= age_threshold for d in train_data])
-    old_mask = np.array([age_lookup.get(d['rep_id'], 0) > age_threshold for d in train_data])
+    # FIX #5: Try both rep_id and repertoire_id for age lookup
+    young_mask = np.array([
+        age_lookup.get(d.get('repertoire_id', d['rep_id']),
+                       age_lookup.get(d['rep_id'], 999)) <= age_threshold
+        for d in train_data
+    ])
+    old_mask = np.array([
+        age_lookup.get(d.get('repertoire_id', d['rep_id']),
+                       age_lookup.get(d['rep_id'], 0)) > age_threshold
+        for d in train_data
+    ])
     if young_mask.sum() < 20 or old_mask.sum() < 20:
         return list(range(len(feature_names)))
     robust_features = []
@@ -2046,10 +2144,19 @@ class ImmuneStatePredictor:
             CFG.SEED = CFG.SEED_DATASET1  # 123
             print(f"\n  [Dataset 1 detected: Using SEED={CFG.SEED} to match original script]")
         
-        # Check if this is Dataset 8 (T1D/MALIDVJ) - needs preprocessing
-        use_preprocessing = (dataset_id == 8) or CFG.RUN_MALIDVJ
-        if use_preprocessing:
-            print(f"\n  [Dataset 8 detected: Enabling Mal-ID preprocessing for MALIDVJ]")
+        # =================================================================
+        # FIX #2: Only enable preprocessing for Dataset 8, NOT when MALIDVJ enabled
+        # Previously: use_preprocessing = (dataset_id == 8) or CFG.RUN_MALIDVJ
+        # This was wrong because RUN_MALIDVJ defaults to True!
+        # =================================================================
+        use_preprocessing = (dataset_id == 8)
+        
+        # Allow explicit override via environment variable
+        if os.environ.get('AIRR_USE_MALID_PREPROCESSING', '').strip() == '1':
+            use_preprocessing = True
+            print("\n  [Mal-ID preprocessing FORCED via AIRR_USE_MALID_PREPROCESSING=1]")
+        elif use_preprocessing:
+            print("\n  [Dataset 8 detected: Enabling Mal-ID preprocessing for MALIDVJ]")
         
         # Load data (with preprocessing for Dataset 8)
         self.train_data, self.metadata = load_train_data(train_dir_path, preprocess=use_preprocessing, n_workers=self.n_jobs)
@@ -2727,7 +2834,22 @@ class ImmuneStatePredictor:
             
             sc = StandardScaler()
             sc.fit(X_tr)
-            m = LogisticRegression(penalty='l1', C=bp['C'], solver='liblinear', random_state=CFG.SEED, max_iter=1000)
+            # =================================================================
+            # FIX #4: vj_elasticnet must use correct penalty/solver/l1_ratio
+            # Previously used: penalty='l1', solver='liblinear' - WRONG!
+            # =================================================================
+            if mt == 'vj_elasticnet':
+                m = LogisticRegression(
+                    penalty='elasticnet',
+                    C=bp['C'],
+                    l1_ratio=bp['l1_ratio'],
+                    solver='saga',
+                    max_iter=2000,
+                    random_state=CFG.SEED
+                )
+            else:
+                m = LogisticRegression(penalty='l1', C=bp['C'], solver='liblinear',
+                                       random_state=CFG.SEED, max_iter=1000)
             if self.sample_weights is not None:
                 m.fit(sc.transform(X_tr), y, sample_weight=self.sample_weights)
             else:
@@ -2759,7 +2881,21 @@ class ImmuneStatePredictor:
                     X_tr[i, j] = f.get(n, 0)
             sc = StandardScaler()
             sc.fit(X_tr)
-            m = LogisticRegression(penalty='l1', C=bp['C'], solver='liblinear', random_state=CFG.SEED, max_iter=1000)
+            # =================================================================
+            # FIX #4: vj_elasticnet must use correct penalty/solver/l1_ratio
+            # =================================================================
+            if mt == 'vj_elasticnet':
+                m = LogisticRegression(
+                    penalty='elasticnet',
+                    C=bp['C'],
+                    l1_ratio=bp['l1_ratio'],
+                    solver='saga',
+                    max_iter=2000,
+                    random_state=CFG.SEED
+                )
+            else:
+                m = LogisticRegression(penalty='l1', C=bp['C'], solver='liblinear',
+                                       random_state=CFG.SEED, max_iter=1000)
             if self.sample_weights is not None:
                 m.fit(sc.transform(X_tr), y, sample_weight=self.sample_weights)
             else:

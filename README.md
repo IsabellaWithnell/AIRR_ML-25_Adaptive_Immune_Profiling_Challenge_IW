@@ -316,3 +316,40 @@ docker run --rm \
 | 7 | emerson | SKIP | emerson_stacking | HSV-2 Emerson |
 | 8 | malidvj | SKIP | none | T1D MALIDVJ |
 
+
+
+
+
+
+### Phase 2 Code Changes
+
+Changes from Phase 1 (Kaggle) submission:
+
+1. Disabled kmer5/6 SGD models (all datasets)
+
+The 5-mer and 6-mer SGD models were excluded from Phase 2 due to excessive memory consumption (~50-80 GB per dataset). These models build massive sparse feature matrices that caused OOM kills when running multiple datasets in parallel.
+Impact: Minimal. kmer5/6 was only the best model on Dataset 3 in Phase 1 (AUC 0.58). Other models (kmer4, gapped_kmer, ensemble) provided equivalent or better performance.
+
+2. Disabled XGBoost for large datasets (≥1 GB training data)
+
+Datasets affected: D2, D10, D11, D14, D30-D40, D49-D53, D76-D80
+"Large" = training directory ≥1 GB (typically 200-400 repertoires with many sequences per repertoire)
+XGBoost was slow and consistently underperformed on large datasets (typical AUC 0.50-0.56, never best model)
+Controlled via SKIP_XGB=1 environment variable which sets HAS_XGB = False
+
+3. Fast scorer swap for Task 2 sequence scoring
+
+When the best Task 1 model is MALIDVJ or pos_aa (sequential scorers, ~5 min per repertoire), the code checks if a parallelisable model (VJ, kmer4, gapped_kmer, etc.) achieved the same AUC (within 0.001). If so, it uses the fast model for Task 2 scoring instead.
+If no exact match, it uses the next best fast model within 0.02 AUC.
+This reduced Task 2 scoring from ~23 hours to ~40 minutes on 2+ GB datasets.
+
+4. Reduced TOP_K_SEQUENCES for large datasets (≥1 GB)
+
+Reduced from 50,000 to 10,000 for large datasets to prevent OOM during sequence deduplication.
+Submission padded to 50,000 per dataset using real sequences from training data with importance score of 0.
+Controlled via REDUCE_TOPK=1 environment variable.
+
+5. Bug fix: KeyError on empty best parameters
+
+Fixed crash when pos_aa model's best parameters dict was empty (all C values failed to beat AUC 0.5 threshold). Now defaults to C=1.0. Affected only D95.
+

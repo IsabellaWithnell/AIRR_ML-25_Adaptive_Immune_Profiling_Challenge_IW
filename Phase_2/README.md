@@ -1,7 +1,6 @@
 # Phase 2 — Submission and Changes
 
-Phase 2 reran the Phase-1 (Kaggle) pipeline on the organisers' infrastructure
-across all challenge datasets. **The method is unchanged.** Five changes were
+Phase 2 reran the pipeline across all challenge datasets. Five changes from airr_ml_submission_v9_parallel_task2.py
 made purely for memory and runtime, so the pipeline could complete on the larger
 Phase-2 datasets without running out of memory.
 

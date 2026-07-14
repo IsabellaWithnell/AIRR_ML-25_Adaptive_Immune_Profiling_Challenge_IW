@@ -32,7 +32,7 @@ python3 apply_phase2_changes.py \
     airr_ml_submission_v9_phase2_submission.py
 ```
 
-## Changes from Phase 1
+## Changes from previous Docker
 
 | # | Change | Trigger | Location | Datasets |
 |---|--------|---------|----------|----------|

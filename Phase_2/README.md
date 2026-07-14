@@ -10,7 +10,7 @@ Phase-2 datasets without running out of memory.
 |------|---------|
 | `airr_ml_submission_v9_phase2_submission.py` | The submitted pipeline: the Phase-1 v9 pipeline with the five changes below. |
 | `run_phase2.sh` | Driver. Runs each dataset with the Phase-2 environment (kmer5/6 off; `SKIP_XGB`/`REDUCE_TOPK` on for large datasets; Task 2 scored on test data). |
-| `apply_phase2_changes.py` | Reproducibility. Applies the five changes to a clean Phase-1 file to regenerate the submission file (see below). |
+| `apply_phase2_changes.py` | Reproducibility. Applies the five changes to a clean airr_ml_submission_v9_parallel_task2.py file to regenerate the submission file (see below). |
 
 ## Reproduce
 
